@@ -1,4 +1,8 @@
 import gradio as gr
+import numpy as np
+
+from transformers import pipeline
+from custom_chat_interface import CustomChatInterface
 
 from llama_cpp import Llama
 from llama_cpp.llama_chat_format import MoondreamChatHandler
@@ -58,15 +62,35 @@ class MyModel:
                 yield response
 
 
+transcriber = pipeline("automatic-speech-recognition", model="openai/whisper-base.en")
+
+
+def transcribe(audio):
+    sr, y = audio
+
+    # Convert to mono if stereo
+    if y.ndim > 1:
+        y = y.mean(axis=1)
+
+    y = y.astype(np.float32)
+    y /= np.max(np.abs(y))
+
+    text = transcriber({"sampling_rate": sr, "raw": y})["text"]
+    return text
+
+
 """
 For information on how to customize the ChatInterface, peruse the gradio docs: https://www.gradio.app/docs/chatinterface
 """
 my_model = MyModel()
 model_choices = [
     "lab2-as/lora_model_gguf, Q4",
+    "lab2-as/lora_model_no_quant_gguf, Q4",
+    "lab2-as/lora_model_math_optimized_gguf, Q4",
 ]
-demo = gr.ChatInterface(
+demo = CustomChatInterface(
     my_model.respond,
+    transcriber=transcribe,
     additional_inputs=[
         gr.Dropdown(
             choices=model_choices,
@@ -74,27 +98,27 @@ demo = gr.ChatInterface(
             label="Select Model",
         ),
         gr.Textbox(
-            value="You are a friendly Chatbot.",
+            value="You are a chatbot with a proficiency in math. You are to answer the mathematical equations correctly and efficiently. You are to reason and explain your solutions thoroughly.",
             label="System message",
         ),
         gr.Slider(
             minimum=1,
             maximum=2048,
-            value=128,
+            value=512,
             step=1,
             label="Max new tokens",
         ),
         gr.Slider(
             minimum=0.1,
             maximum=4.0,
-            value=0.7,
+            value=0.4,
             step=0.1,
             label="Temperature",
         ),
         gr.Slider(
             minimum=0.1,
             maximum=1.0,
-            value=0.95,
+            value=0.15,
             step=0.05,
             label="Top-p (Nucleus sampling)",
         ),
